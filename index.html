@@ -1,610 +1,234 @@
-<!DOCTYPE html> <html lang="es"> <head> <meta charset="utf-8">
-<meta
-    name="viewport"
-    content="width=device-width, initial-scale=1"
->
-<title>Nebulosa 3D 🌌</title>
-<style>
-    html,
-    body {
-        margin: 0;
-        height: 100%;
-        overflow: hidden;
-        background: #000;
-        touch-action: none;
-    }
-    #app {
-        position: fixed;
-        inset: 0;
-    }
-    .hud {
-        position: fixed;
-        top: 12px;
-        left: 12px;
-        z-index: 10;
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Nebulosa 3D 🌌</title>
+    <style>
+        html, body {
+            margin: 0;
+            height: 100%;
+            overflow: hidden;
+            background: #000;
+            touch-action: none;
+        }
+        #app {
+            position: fixed;
+            inset: 0;
+        }
+        .hud {
+            position: fixed;
+            top: 12px;
+            left: 12px;
+            z-index: 10;
+            background: rgba(0, 0, 0, 0.35);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            padding: 10px 12px;
+            border-radius: 10px;
+            color: #fff;
+            font-family: system-ui, Arial, sans-serif;
+            font-size: 12px;
+            backdrop-filter: blur(6px);
+            max-width: 360px;
+            pointer-events: none;
+        }
+    </style>
+</head> 
+<body>
+    <div id="app"></div>
+    <div class="hud">
+        Mantén presionado y arrastra para mover la nebulosa
+    </div>
 
-        background: rgba(0, 0, 0, 0.35);
-        border: 1px solid rgba(255, 255, 255, 0.08);
+    <script type="module">
+        import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js";
 
-        padding: 10px 12px;
-        border-radius: 10px;
+        // Configuración inicial de la escena, cámara y renderizador
+        const container = document.getElementById("app");
+        const scene = new THREE.Scene();
+        scene.background = null;
 
-        color: #fff;
-        font-family: system-ui, Arial, sans-serif;
-        font-size: 12px;
+        const camera = new THREE.PerspectiveCamera(60, innerWidth / innerHeight, 0.1, 2000);
+        scene.add(camera);
 
-        backdrop-filter: blur(6px);
+        const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+        renderer.setSize(innerWidth, innerHeight);
+        renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+        container.appendChild(renderer.domElement);
 
-        max-width: 360px;
+        // Luz ambiental
+        scene.add(new THREE.AmbientLight(0xffffff, 0.25));
 
-        pointer-events: none;
-    }
-</style>
-
-</head> <body>
-<div id="app"></div>
-
-<div class="hud">
-    Mantén presionado y arrastra para mover la nebulosa
-</div>
-<script type="module">
-
-    import * as THREE from
-        "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js";
-
-    const container = document.getElementById("app");
-
-    const scene = new THREE.Scene();
-
-    const camera = new THREE.PerspectiveCamera(
-        60,
-        innerWidth / innerHeight,
-        0.1,
-        2000
-    );
-
-    scene.add(camera);
-
-    const renderer = new THREE.WebGLRenderer({
-        antialias: true,
-        alpha: true
-    });
-
-    renderer.setSize(
-        innerWidth,
-        innerHeight
-    );
-
-    renderer.setPixelRatio(
-        Math.min(devicePixelRatio, 2)
-    );
-
-    container.appendChild(
-        renderer.domElement
-    );
-
-    // Fondo transparente
-    scene.background = null;
-
-    // Luz ambiental
-    scene.add(
-        new THREE.AmbientLight(
-            0xffffff,
-            0.25
-        )
-    );
-
-    function randn() {
-
-        return (
-            Math.random() +
-            Math.random() +
-            Math.random() +
-            Math.random() -
-            2
-        ) / 2;
-
-    }
-
-    function createNebula(
-        density = 40,
-        brightness = 1.0
-    ) {
-
-        // Eliminar nebulosa anterior
-        if (window.__nebulaPoints) {
-
-            scene.remove(
-                window.__nebulaPoints
-            );
-
-            window.__nebulaPoints.geometry.dispose();
-
-            window.__nebulaPoints.material.dispose();
-
-            window.__nebulaPoints = null;
+        // Utilidad de distribución normal aproximada
+        function randn() {
+            return (Math.random() + Math.random() + Math.random() + Math.random() - 2) / 2;
         }
 
+        // Creación de la nebulosa por partículas
+        function createNebula(density = 40, brightness = 1.0) {
+            if (window.__nebulaPoints) {
+                scene.remove(window.__nebulaPoints);
+                window.__nebulaPoints.geometry.dispose();
+                window.__nebulaPoints.material.dispose();
+                window.__nebulaPoints = null;
+            }
 
-        // Cantidad de partículas
-        const count = Math.floor(
-            density * 2200
-        );
+            const count = Math.floor(density * 2200);
+            const geometry = new THREE.BufferGeometry();
+            const positions = new Float32Array(count * 3);
+            const colors = new Float32Array(count * 3);
 
+            const colorA = new THREE.Color("#8a5cff");
+            const colorB = new THREE.Color("#35c9ff");
+            const colorC = new THREE.Color("#ff4fd8");
 
-        // Geometría
-        const geometry =
-            new THREE.BufferGeometry();
+            const scale = 7 + density / 10;
+            const armCount = 3;
+            const turbulence = 0.85;
+            const thickness = 1.2 + density / 60;
 
+            for (let i = 0; i < count; i++) {
+                const t = Math.pow(Math.random(), 0.55);
+                const r = t * scale;
+                const arm = i % armCount;
+                const angleBase = (arm / armCount) * Math.PI * 2;
+                const angle = angleBase + t * Math.PI * 3.5 + randn() * 0.6;
+                const noise = randn() * turbulence * (1 - t);
 
-        // Arrays de partículas
-        const positions =
-            new Float32Array(count * 3);
+                const x = Math.cos(angle) * r + noise;
+                const y = randn() * thickness * (0.35 + (1 - t)) + noise * 0.15;
+                const z = Math.sin(angle) * r + noise;
 
-        const colors =
-            new Float32Array(count * 3);
+                positions[i * 3] = x;
+                positions[i * 3 + 1] = y;
+                positions[i * 3 + 2] = z;
 
+                const mix1 = Math.random();
+                const mix2 = Math.random();
 
-        // Colores
-        const colorA =
-            new THREE.Color("#8a5cff");
+                const col = colorA.clone().lerp(colorB, mix1 * (0.4 + t));
+                col.lerp(colorC, mix2 * (0.2 + (1 - t)));
 
-        const colorB =
-            new THREE.Color("#35c9ff");
+                colors[i * 3] = col.r;
+                colors[i * 3 + 1] = col.g;
+                colors[i * 3 + 2] = col.b;
+            }
 
-        const colorC =
-            new THREE.Color("#ff4fd8");
+            geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
+            geometry.setAttribute("color", new THREE.BufferAttribute(colors, 3));
 
-
-        // Parámetros
-        const scale =
-            7 + density / 10;
-
-        const armCount = 3;
-
-        const turbulence = 0.85;
-
-        const thickness =
-            1.2 + density / 60;
-
-        for (let i = 0; i < count; i++) {
-
-            const t =
-                Math.pow(
-                    Math.random(),
-                    0.55
-                );
-
-
-            const r =
-                t * scale;
-
-
-            const arm =
-                i % armCount;
-
-
-            const angleBase =
-                (arm / armCount) *
-                Math.PI *
-                2;
-
-
-            const angle =
-                angleBase +
-                t * Math.PI * 3.5 +
-                randn() * 0.6;
-
-
-            const noise =
-                randn() *
-                turbulence *
-                (1 - t);
-
-
-            const x =
-                Math.cos(angle) * r +
-                noise;
-
-
-            const y =
-                randn() *
-                thickness *
-                (0.35 + (1 - t)) +
-                noise * 0.15;
-
-
-            const z =
-                Math.sin(angle) * r +
-                noise;
-
-
-            // Posición
-            positions[i * 3] =
-                x;
-
-            positions[i * 3 + 1] =
-                y;
-
-            positions[i * 3 + 2] =
-                z;
-
-
-            // Color aleatorio
-            const mix1 =
-                Math.random();
-
-            const mix2 =
-                Math.random();
-
-
-            const col =
-                colorA
-                    .clone()
-                    .lerp(
-                        colorB,
-                        mix1 * (0.4 + t)
-                    );
-
-
-            col.lerp(
-                colorC,
-                mix2 *
-                (0.2 + (1 - t))
-            );
-
-
-            colors[i * 3] =
-                col.r;
-
-            colors[i * 3 + 1] =
-                col.g;
-
-            colors[i * 3 + 2] =
-                col.b;
-        }
-
-        geometry.setAttribute(
-            "position",
-            new THREE.BufferAttribute(
-                positions,
-                3
-            )
-        );
-
-
-        geometry.setAttribute(
-            "color",
-            new THREE.BufferAttribute(
-                colors,
-                3
-            )
-        );
-
-        const material =
-            new THREE.PointsMaterial({
-
-                size:
-                    0.06 +
-                    density / 950,
-
+            const material = new THREE.PointsMaterial({
+                size: 0.06 + density / 950,
                 sizeAttenuation: true,
-
                 vertexColors: true,
-
                 transparent: true,
-
-                opacity:
-                    Math.min(
-                        1,
-                        0.55 * brightness
-                    ),
-
-                blending:
-                    THREE.AdditiveBlending,
-
+                opacity: Math.min(1, 0.55 * brightness),
+                blending: THREE.AdditiveBlending,
                 depthWrite: false
             });
 
-        const points =
-            new THREE.Points(
-                geometry,
-                material
-            );
+            const points = new THREE.Points(geometry, material);
+            scene.add(points);
+            window.__nebulaPoints = points;
+        }
 
+        // Inicializar nebulosa
+        createNebula(40, 1.0);
 
-        scene.add(points);
+        // Control de cámara orbital
+        const target = new THREE.Vector3(0, 0, 0);
+        let radius = 26;
+        let theta = 0;
+        let phi = 0.32;
+        const phiMin = 0.05;
+        const phiMax = Math.PI / 2 - 0.05;
 
+        function updateCameraPosition() {
+            const x = radius * Math.cos(phi) * Math.sin(theta);
+            const y = radius * Math.sin(phi);
+            const z = radius * Math.cos(phi) * Math.cos(theta);
 
-        // Guardar referencia
-        window.__nebulaPoints =
-            points;
-    }
+            camera.position.set(x, y + 6, z);
+            camera.lookAt(target);
+        }
 
-    // Crear nebulosa
-    createNebula(
-        40,
-        1.0
-    );
+        updateCameraPosition();
 
-    const target =
-        new THREE.Vector3(
-            0,
-            0,
-            0
-        );
+        // Variables de interacción por arrastre
+        let isDragging = false;
+        let lastX = 0;
+        let lastY = 0;
 
+        renderer.domElement.style.cursor = "grab";
 
-    // Distancia de la cámara
-    let radius = 26;
-
-
-    // Rotación horizontal
-    let theta = 0;
-
-
-    // Rotación vertical
-    let phi = 0.32;
-
-
-    // Límites verticales
-    const phiMin = 0.05;
-
-    const phiMax =
-        Math.PI / 2 - 0.05;
-
-
-    function updateCameraPosition() {
-
-        const x =
-            radius *
-            Math.cos(phi) *
-            Math.sin(theta);
-
-
-        const y =
-            radius *
-            Math.sin(phi);
-
-
-        const z =
-            radius *
-            Math.cos(phi) *
-            Math.cos(theta);
-
-
-        camera.position.set(
-            x,
-            y + 6,
-            z
-        );
-
-
-        camera.lookAt(
-            target
-        );
-    }
-
-
-    // Posición inicial
-    updateCameraPosition();
-
-    let isDragging = false;
-
-    let lastX = 0;
-
-    let lastY = 0;
-
-
-    // Cursor
-    renderer.domElement.style.cursor =
-        "grab";
-
-    renderer.domElement.addEventListener(
-        "pointerdown",
-        (event) => {
-
+        renderer.domElement.addEventListener("pointerdown", (event) => {
             isDragging = true;
+            lastX = event.clientX;
+            lastY = event.clientY;
+            renderer.domElement.setPointerCapture(event.pointerId);
+            renderer.domElement.style.cursor = "grabbing";
+        });
 
+        renderer.domElement.addEventListener("pointermove", (event) => {
+            if (!isDragging) return;
 
-            lastX =
-                event.clientX;
+            const dx = event.clientX - lastX;
+            const dy = event.clientY - lastY;
 
-            lastY =
-                event.clientY;
+            lastX = event.clientX;
+            lastY = event.clientY;
 
-
-            renderer.domElement.setPointerCapture(
-                event.pointerId
-            );
-
-
-            renderer.domElement.style.cursor =
-                "grabbing";
-        }
-    );
-
-    renderer.domElement.addEventListener(
-        "pointermove",
-        (event) => {
-
-            // Si no está presionando,
-            // no hacer nada
-            if (!isDragging) {
-                return;
-            }
-
-
-            // Movimiento horizontal
-            const dx =
-                event.clientX -
-                lastX;
-
-
-            // Movimiento vertical
-            const dy =
-                event.clientY -
-                lastY;
-
-
-            // Guardar nueva posición
-            lastX =
-                event.clientX;
-
-            lastY =
-                event.clientY;
-
-
-            // Sensibilidad
             const speed = 0.005;
+            theta -= dx * speed;
+            phi -= dy * speed;
 
-
-            // Movimiento horizontal
-            theta -=
-                dx * speed;
-
-
-            // Movimiento vertical
-            phi -=
-                dy * speed;
-
-
-            // Evitar que se voltee
-            phi =
-                Math.max(
-                    phiMin,
-                    Math.min(
-                        phiMax,
-                        phi
-                    )
-                );
-
-
-            // Actualizar cámara
+            phi = Math.max(phiMin, Math.min(phiMax, phi));
             updateCameraPosition();
-        }
-    );
+        });
 
-    renderer.domElement.addEventListener(
-        "pointerup",
-        (event) => {
-
+        renderer.domElement.addEventListener("pointerup", (event) => {
             isDragging = false;
-
-
             try {
+                renderer.domElement.releasePointerCapture(event.pointerId);
+            } catch (error) {}
+            renderer.domElement.style.cursor = "grab";
+        });
 
-                renderer.domElement.releasePointerCapture(
-                    event.pointerId
-                );
+        renderer.domElement.addEventListener("pointercancel", () => {
+            isDragging = false;
+            renderer.domElement.style.cursor = "grab";
+        });
 
-            } catch (error) {
+        renderer.domElement.addEventListener("wheel", (event) => {
+            radius *= Math.exp(event.deltaY * 0.001);
+            radius = Math.max(10, Math.min(80, radius));
+            updateCameraPosition();
+        }, { passive: true });
 
-                // No hacer nada
+        // Bucle de animación
+        const clock = new THREE.Clock();
+
+        function animate() {
+            requestAnimationFrame(animate);
+
+            const time = clock.getElapsedTime();
+
+            if (window.__nebulaPoints) {
+                window.__nebulaPoints.rotation.y = time * 0.08;
+                window.__nebulaPoints.rotation.x = Math.sin(time * 0.25) * 0.08;
             }
 
-
-            renderer.domElement.style.cursor =
-                "grab";
-        }
-    );
-    renderer.domElement.addEventListener(
-        "pointercancel",
-        () => {
-
-            isDragging = false;
-
-            renderer.domElement.style.cursor =
-                "grab";
-        }
-    );
-
-    renderer.domElement.addEventListener(
-        "wheel",
-        (event) => {
-
-            radius *= Math.exp(
-                event.deltaY * 0.001
-            );
-
-
-            radius =
-                Math.max(
-                    10,
-                    Math.min(
-                        80,
-                        radius
-                    )
-                );
-
-
-            updateCameraPosition();
-        },
-        {
-            passive: true
-        }
-    );
-
-    const clock =
-        new THREE.Clock();
-
-
-    function animate() {
-
-        requestAnimationFrame(
-            animate
-        );
-
-
-        const time =
-            clock.getElapsedTime();
-
-
-        // Rotación automática suave
-        if (window.__nebulaPoints) {
-
-            window.__nebulaPoints.rotation.y =
-                time * 0.08;
-
-
-            window.__nebulaPoints.rotation.x =
-                Math.sin(
-                    time * 0.25
-                ) * 0.08;
+            renderer.render(scene, camera);
         }
 
+        animate();
 
-        // Renderizar
-        renderer.render(
-            scene,
-            camera
-        );
-    }
-
-
-    // Iniciar animación
-    animate();
-    
-    addEventListener(
-        "resize",
-        () => {
-
-            camera.aspect =
-                innerWidth /
-                innerHeight;
-
-
+        // Redimensionamiento de ventana
+        window.addEventListener("resize", () => {
+            camera.aspect = innerWidth / innerHeight;
             camera.updateProjectionMatrix();
-
-
-            renderer.setSize(
-                innerWidth,
-                innerHeight
-            );
-        }
-    );
-
-</script>
-
+            renderer.setSize(innerWidth, innerHeight);
+        });
+    </script>
 </body> 
 </html>
