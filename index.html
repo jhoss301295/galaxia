@@ -1,0 +1,221 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Nebulosa 3D 🌌</title>
+  <style>
+    html, body { margin: 0; height: 100%; overflow: hidden; background: #000; }
+    #app { position: fixed; inset: 0; }
+    .hud{
+      position: fixed; top: 12px; left: 12px; z-index: 10;
+      background: rgba(0,0,0,0.35); border: 1px solid rgba(255,255,255,0.08);
+      padding: 10px 12px; border-radius: 10px; color: #fff; font-family: system-ui, Arial;
+      backdrop-filter: blur(6px);
+      font-size: 12px;
+      max-width: 360px;
+    }
+  </style>
+</head>
+<body>
+  <div id="app"></div>
+  <div class="hud">
+    🖱️ Arrastra para girar (arriba/abajo y lados) • Rueda del mouse para zoom
+  </div>
+
+  <script type="module">
+    import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js";
+
+    const container = document.getElementById("app");
+    const scene = new THREE.Scene();
+
+    const camera = new THREE.PerspectiveCamera(60, innerWidth/innerHeight, 0.1, 2000);
+    scene.add(camera);
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+    renderer.setSize(innerWidth, innerHeight);
+    renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+    container.appendChild(renderer.domElement);
+
+    // Fondo espacial simple (opcional)
+    scene.background = null;
+
+    scene.add(new THREE.AmbientLight(0xffffff, 0.25));
+
+    // Nube de partículas (nebula)
+    function randn() {
+      return (Math.random() + Math.random() + Math.random() + Math.random() - 2) / 2;
+    }
+
+    function createNebula(density = 40, brightness = 1.0) {
+      if (window.__nebulaPoints) {
+        scene.remove(window.__nebulaPoints);
+        window.__nebulaPoints.geometry.dispose();
+        window.__nebulaPoints.material.dispose();
+        window.__nebulaPoints = null;
+      }
+
+      const count = Math.floor(density * 2200);
+      const geometry = new THREE.BufferGeometry();
+      const positions = new Float32Array(count * 3);
+      const colors = new Float32Array(count * 3);
+
+      const colorA = new THREE.Color("#8a5cff");
+      const colorB = new THREE.Color("#35c9ff");
+      const colorC = new THREE.Color("#ff4fd8");
+
+      const scale = 7 + density / 10;
+      const armCount = 3;
+      const turbulence = 0.85;
+      const thickness = 1.2 + density / 60;
+
+      for (let i = 0; i < count; i++) {
+        const t = Math.pow(Math.random(), 0.55);
+        const r = t * scale;
+
+        const arm = i % armCount;
+        const angleBase = (arm / armCount) * Math.PI * 2;
+
+        const angle = angleBase + t * Math.PI * 3.5 + randn() * 0.6;
+        const noise = randn() * turbulence * (1 - t);
+
+        const x = Math.cos(angle) * r + noise;
+        const y = randn() * thickness * (0.35 + (1 - t)) + noise * 0.15;
+        const z = Math.sin(angle) * r + noise;
+
+        positions[i*3+0] = x;
+        positions[i*3+1] = y;
+        positions[i*3+2] = z;
+
+        const mix1 = Math.random();
+        const mix2 = Math.random();
+        const col = colorA.clone().lerp(colorB, mix1 * (0.4 + t));
+        col.lerp(colorC, mix2 * (0.2 + (1 - t)));
+
+        colors[i*3+0] = col.r;
+        colors[i*3+1] = col.g;
+        colors[i*3+2] = col.b;
+      }
+
+      geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
+      geometry.setAttribute("color", new THREE.BufferAttribute(colors, 3));
+
+      const material = new THREE.PointsMaterial({
+        size: 0.06 + density / 950,
+        sizeAttenuation: true,
+        vertexColors: true,
+        transparent: true,
+        opacity: Math.min(1, 0.55 * brightness),
+        blending: THREE.AdditiveBlending,
+        depthWrite: false
+      });
+
+      const points = new THREE.Points(geometry, material);
+      scene.add(points);
+
+      window.__nebulaPoints = points;
+    }
+
+    createNebula(40, 1.0);
+
+    // ====== Control con mouse (sin OrbitControls) ======
+    // Usamos ángulos esféricos alrededor del centro (0,0,0)
+    const target = new THREE.Vector3(0, 0, 0);
+
+    let radius = 26;     // distancia (zoom)
+    let theta = 0;       // giro izquierda/derecha
+    let phi = 0.32;      // arriba/abajo
+
+    // rangos para evitar voltear
+    const phiMin = 0.05;
+    const phiMax = Math.PI/2 - 0.05;
+
+    // Posición inicial
+    function updateCameraPosition() {
+      // Convertimos a coordenadas cartesianas
+      const x = radius * Math.cos(phi) * Math.sin(theta);
+      const y = radius * Math.sin(phi);
+      const z = radius * Math.cos(phi) * Math.cos(theta);
+
+      camera.position.set(x, y + 6, z); // +6 para centrar mejor
+      camera.lookAt(target);
+    }
+
+    updateCameraPosition();
+
+    let isDragging = false;
+    let lastX = 0, lastY = 0;
+
+    renderer.domElement.style.cursor = "grab";
+
+    renderer.domElement.addEventListener("pointerdown", (e) => {
+      isDragging = true;
+      lastX = e.clientX;
+      lastY = e.clientY;
+      renderer.domElement.setPointerCapture(e.pointerId);
+      renderer.domElement.style.cursor = "grabbing";
+    });
+
+    renderer.domElement.addEventListener("pointermove", (e) => {
+      if (!isDragging) return;
+
+      const dx = e.clientX - lastX;
+      const dy = e.clientY - lastY;
+      lastX = e.clientX;
+      lastY = e.clientY;
+
+      // Sensibilidad
+      const speed = 0.005;
+
+      theta -= dx * speed;   // izquierda/derecha
+      phi   -= dy * speed;   // arriba/abajo
+
+      // clamp para que no se "voltee"
+      phi = Math.max(phiMin, Math.min(phiMax, phi));
+
+      updateCameraPosition();
+    });
+
+    function stopDrag() {
+      isDragging = false;
+      renderer.domElement.style.cursor = "grab";
+    }
+
+    renderer.domElement.addEventListener("pointerup", stopDrag);
+    renderer.domElement.addEventListener("pointercancel", stopDrag);
+    renderer.domElement.addEventListener("pointerleave", () => {
+      stopDrag();
+    });
+
+    // Zoom con rueda
+    window.addEventListener("wheel", (e) => {
+      // deltaY positivo = scroll abajo => zoom out
+      radius *= Math.exp(e.deltaY * 0.001);
+      radius = Math.max(10, Math.min(80, radius));
+      updateCameraPosition();
+    }, { passive: true });
+
+    // Animación (rotación suave de la nebulosa)
+    const clock = new THREE.Clock();
+    function animate() {
+      requestAnimationFrame(animate);
+      const t = clock.getElapsedTime();
+
+      if (window.__nebulaPoints) {
+        window.__nebulaPoints.rotation.y = t * 0.08;
+        window.__nebulaPoints.rotation.x = Math.sin(t * 0.25) * 0.08;
+      }
+
+      renderer.render(scene, camera);
+    }
+    animate();
+
+    // Responsividad
+    addEventListener("resize", () => {
+      camera.aspect = innerWidth/innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(innerWidth, innerHeight);
+    });
+  </script>
+</body>
+</html>
